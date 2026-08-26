@@ -1,0 +1,3 @@
+# Knox File Host
+
+Inicializando o projeto…
