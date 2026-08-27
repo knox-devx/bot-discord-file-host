@@ -60,6 +60,27 @@ def validate_expiry(expires_in: int) -> int:
     return expires_in
 
 
+def build_signed_request_payload(
+    file_uri: str,
+    *,
+    expires_in: int = 3600,
+    password: str | None = None,
+) -> dict[str, Any]:
+    """Monta o JSON de createSignedUrl, incluindo a senha quando necessária."""
+    validate_expiry(expires_in)
+    clean_uri = file_uri.strip()
+    if not clean_uri:
+        raise FileHostError("file_uri está vazio; não é possível criar um link temporário.")
+
+    payload: dict[str, Any] = {
+        "file_uri": clean_uri,
+        "expires_in": expires_in,
+    }
+    if password:
+        payload["password"] = password
+    return payload
+
+
 def absolute_view_url(site_url: str, view_url: str | None) -> str | None:
     """Converte view_url relativo, como /file/abc123, em URL absoluta."""
     if not view_url:
@@ -206,17 +227,25 @@ class FileHostClient:
             except (aiohttp.ClientError, TimeoutError) as exc:
                 raise FileHostError(f"Falha de rede ao chamar uploadFile: {type(exc).__name__}.") from exc
 
-    async def create_signed_url(self, file_uri: str, *, expires_in: int = 3600) -> SignedUrlResult:
-        """POST /createSignedUrl para arquivos privados."""
-        validate_expiry(expires_in)
-        if not file_uri.strip():
-            raise FileHostError("file_uri está vazio; não é possível criar um link temporário.")
+    async def create_signed_url(
+        self,
+        file_uri: str,
+        *,
+        expires_in: int = 3600,
+        password: str | None = None,
+    ) -> SignedUrlResult:
+        """POST /createSignedUrl para arquivos privados, inclusive protegidos por senha."""
+        request_payload = build_signed_request_payload(
+            file_uri,
+            expires_in=expires_in,
+            password=password,
+        )
 
         session = await self._get_session()
         try:
             async with session.post(
                 self.settings.api_signed_url,
-                json={"file_uri": file_uri, "expires_in": expires_in},
+                json=request_payload,
                 allow_redirects=True,
             ) as response:
                 payload = await self._read_json(response)
