@@ -59,7 +59,7 @@ def load_settings() -> Settings:
 
     functions_url = os.getenv(
         "API_FUNCTIONS_URL",
-        "https://file-host.base44.app/functions",
+        "https://dev-cloud.base44.app/functions",
     ).strip().rstrip("/")
     if not _valid_http_url(functions_url):
         raise RuntimeError("API_FUNCTIONS_URL precisa ser uma URL HTTP/HTTPS válida.")
