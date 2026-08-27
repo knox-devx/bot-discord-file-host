@@ -25,7 +25,7 @@ URL_KEYS = (
 
 
 class OmniHostError(RuntimeError):
-    """Erro amigável retornado pelo cliente da API de hospedagem."""
+    """Erro amigável retornado pelo cliente da API File Host."""
 
 
 @dataclass(slots=True, frozen=True)
@@ -53,7 +53,7 @@ def extract_url(payload: Any) -> str | None:
             if isinstance(value, str) and _is_http_url(value.strip()):
                 return value.strip()
 
-        # Alguns backends embrulham a resposta em data/result/file.
+        # Alguns backends embrulham a resposta em data/result/file/upload.
         for key in ("data", "result", "file", "upload"):
             if key in payload:
                 found = extract_url(payload[key])
@@ -88,7 +88,7 @@ class OmniHostClient:
         self._session: aiohttp.ClientSession | None = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
-        # A sessão é criada somente quando já existe um loop assíncrono ativo.
+        # A sessão só é criada quando já existe um loop assíncrono ativo.
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession(timeout=self._timeout)
         return self._session
@@ -98,18 +98,18 @@ class OmniHostClient:
             await self._session.close()
 
     def candidate_endpoints(self) -> list[str]:
+        """Monta as rotas candidatas sem prender o bot a um único nome de função."""
         if self.settings.api_upload_url:
             return [self.settings.api_upload_url]
 
         base = self.settings.api_base_url.rstrip("/")
         endpoints: list[str] = []
         for function_name in self.settings.api_functions:
-            # Formato atual documentado pelo Base44.
+            # Formato padrão das Backend Functions públicas do Base44.
             endpoints.append(f"{base}/functions/{function_name}")
-            # Compatibilidade com a URL provável fornecida para este app.
+            # Mantido como fallback de compatibilidade para apps/rotas antigas.
             endpoints.append(f"{base}/base44/functions/{function_name}")
 
-        # Remove duplicatas preservando a ordem.
         return list(dict.fromkeys(endpoints))
 
     async def upload(self, file_path: Path, original_name: str, content_type: str | None) -> UploadResult:
@@ -133,8 +133,9 @@ class OmniHostClient:
 
         details = "\n".join(errors[-6:]) if errors else "Nenhum endpoint foi tentado."
         raise OmniHostError(
-            "A API não aceitou o upload em nenhuma rota configurada. "
-            "Se a documentação indicar uma rota específica, coloque-a em API_UPLOAD_URL.\n"
+            "A API File Host não aceitou o upload em nenhuma rota configurada. "
+            "Confira https://file-host.base44.app/docs e, se houver uma rota específica, "
+            "coloque-a em API_UPLOAD_URL.\n"
             f"Detalhes:\n{details}"
         )
 
