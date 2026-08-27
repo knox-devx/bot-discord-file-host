@@ -1,6 +1,6 @@
 <div align="center">
 
-<img width="100%" src="https://capsule-render.vercel.app/api?type=waving&height=210&color=0:09090b,45:18181b,100:5865F2&text=Knox%20File%20Host&fontColor=ffffff&fontSize=46&fontAlignY=38&desc=Discord%20Bot%20%E2%80%A2%20Python%20%E2%80%A2%20Omni%20Host%20API&descAlignY=60" alt="Knox File Host" />
+<img width="100%" src="https://capsule-render.vercel.app/api?type=waving&height=210&color=0:09090b,45:18181b,100:5865F2&text=Knox%20File%20Host&fontColor=ffffff&fontSize=46&fontAlignY=38&desc=Discord%20Bot%20%E2%80%A2%20Python%20%E2%80%A2%20File%20Host%20API&descAlignY=60" alt="Knox File Host" />
 
 # 𝑲𝒏𝒐𝒙 𝑭𝒊𝒍𝒆 𝑯𝒐𝒔𝒕
 
@@ -8,7 +8,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Discord](https://img.shields.io/badge/Discord-Slash%20Commands-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com)
-[![Base44](https://img.shields.io/badge/API-Base44-111827?style=for-the-badge)](https://slick-omni-host-link.base44.app/docs)
+[![File Host API](https://img.shields.io/badge/API-File%20Host-111827?style=for-the-badge)](https://file-host.base44.app/docs)
 [![License](https://img.shields.io/badge/Licen%C3%A7a-MIT-22c55e?style=for-the-badge)](./LICENSE)
 
 **Criado e mantido por [Knox Dev](https://github.com/knox-devx)**
@@ -19,9 +19,12 @@
 
 ## ✨ O que ele faz?
 
-O bot recebe um `discord.Attachment` através do comando `/hospedar`, baixa o arquivo temporariamente, envia para a API **Omni Host/Base44** e devolve o endereço público retornado pela API.
+O bot recebe um `discord.Attachment` através do comando `/hospedar`, baixa o arquivo temporariamente, envia para a **File Host API** e devolve o endereço público retornado pela API.
 
 Ele **não define um limite próprio de tamanho ou quantidade de arquivos**. Na prática continuam existindo os limites externos do Discord, do servidor em que o bot roda e da própria API de hospedagem.
+
+> [!NOTE]
+> Site/documentação atual da API: **https://file-host.base44.app/docs**
 
 ## 🚀 Recursos
 
@@ -48,7 +51,7 @@ Copie `.env.example` para `.env`:
 DISCORD_TOKEN=TOKEN_DO_SEU_BOT
 BOT_NAME=Knox File Host
 
-API_BASE_URL=https://slick-omni-host-link.base44.app
+API_BASE_URL=https://file-host.base44.app
 API_UPLOAD_URL=
 API_FUNCTIONS=upload,upload-file,host-file
 
@@ -59,31 +62,46 @@ API_KEY_PREFIX=Bearer
 
 ### Qual URL da API é usada?
 
-A documentação geral do Base44 expõe funções externas no formato:
+O domínio atual do serviço é:
 
 ```text
-https://<app>.base44.app/functions/<nome-da-funcao>
+https://file-host.base44.app
 ```
 
-Como o endereço informado para este projeto também menciona `base44/functions/`, o cliente possui compatibilidade com os dois formatos. Ele tenta, em ordem, algo como:
+A documentação atual está em:
 
 ```text
-https://slick-omni-host-link.base44.app/functions/upload
-https://slick-omni-host-link.base44.app/base44/functions/upload
+https://file-host.base44.app/docs
 ```
 
-Se a documentação em https://slick-omni-host-link.base44.app/docs mostrar uma rota exata, basta colocar a URL completa em `API_UPLOAD_URL`. Nesse caso o bot para de tentar rotas alternativas e utiliza somente a URL informada.
+Quando `API_UPLOAD_URL` estiver vazio, o cliente tenta as funções configuradas em `API_FUNCTIONS` usando o formato padrão de Backend Functions:
+
+```text
+https://file-host.base44.app/functions/upload
+https://file-host.base44.app/functions/upload-file
+https://file-host.base44.app/functions/host-file
+```
+
+Também existe um fallback para o formato legado `/base44/functions/...`, evitando quebra caso o backend ainda exponha alguma função antiga por esse caminho.
+
+Se a documentação informar uma rota exata, configure a URL completa:
+
+```env
+API_UPLOAD_URL=https://file-host.base44.app/functions/NOME_EXATO_DA_FUNCAO
+```
+
+Quando `API_UPLOAD_URL` está preenchido, o bot usa **somente essa rota** e não tenta alternativas.
 
 ### Formato do upload
 
-O cliente envia:
+O cliente envia o arquivo como:
 
 ```text
 Content-Type: multipart/form-data
 campo: file
 ```
 
-E reconhece respostas contendo campos como:
+O cliente reconhece respostas contendo campos como:
 
 ```json
 {
@@ -91,7 +109,7 @@ E reconhece respostas contendo campos como:
 }
 ```
 
-Também aceita `url`, `link`, `download_url`, `public_url` e respostas aninhadas em `data`/`result`.
+Também aceita `url`, `link`, `download_url`, `public_url`, `fileUrl` e respostas aninhadas em `data`, `result`, `file` ou `upload`.
 
 ---
 
@@ -128,7 +146,7 @@ python main.py
 | Comando | Descrição |
 |---|---|
 | `/hospedar` | Envia um arquivo para a API e devolve o link |
-| `/sobre` | Exibe informações sobre o serviço |
+| `/sobre` | Exibe informações sobre o serviço e a documentação atual |
 
 ### Exemplo
 
@@ -169,7 +187,7 @@ flowchart LR
     A[Usuário] -->|/hospedar + arquivo| B[Discord]
     B --> C[Bot Python]
     C --> D[Arquivo temporário]
-    D -->|multipart/form-data| E[Omni Host / Base44]
+    D -->|multipart/form-data| E[File Host API]
     E -->|URL pública| C
     C -->|Embed + botão| A
     C --> F[Remove temporário]
