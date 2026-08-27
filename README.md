@@ -2,11 +2,11 @@
 
 # Knox File Host
 
-**Discord Bot • Python • Knox Dev Cloud / File Host API**
+**Discord Bot • Python • Dev Cloud / File Host API**
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Discord](https://img.shields.io/badge/Discord-Slash%20Commands-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com)
-[![API](https://img.shields.io/badge/API-Knox%20Dev%20Cloud-111827?style=for-the-badge)](https://file-host.base44.app/docs)
+[![API](https://img.shields.io/badge/API-Dev%20Cloud-111827?style=for-the-badge)](https://dev-cloud.base44.app/docs)
 
 **Criado e mantido por [Knox Dev](https://github.com/knox-devx)**
 
@@ -16,7 +16,7 @@
 
 ## Visão geral
 
-O bot hospeda anexos do Discord usando a File Host API e entrega o resultado em dois lugares:
+O bot hospeda anexos do Discord usando a File Host API da **Dev Cloud** e entrega o resultado em dois lugares:
 
 1. por **DM**;
 2. no canal onde `/hospedar` foi usado como resposta **ephemeral**, visível somente para quem executou o comando.
@@ -31,7 +31,7 @@ O bot resolve isso automaticamente:
 
 1. gera o `signed_url` normalmente;
 2. se ele couber em 512 caracteres, cria o botão **Abrir arquivo** diretamente;
-3. se passar de 512, chama `POST /functions/shortenUrl` da **Knox Dev Cloud**;
+3. se passar de 512, chama `POST /functions/shortenUrl` da **Dev Cloud**;
 4. se o link encurtado couber, usa o link curto no botão;
 5. se o encurtador estiver indisponível, ainda não tiver sido publicado ou retornar um link grande demais, o bot mostra o botão **Receber link**;
 6. ao clicar em **Receber link**, somente o dono do upload recebe o link completo e o bot também tenta enviar uma cópia por DM.
@@ -41,9 +41,9 @@ Assim o upload não falha por causa de `400 Invalid Form Body` do Discord.
 ## Endpoints usados
 
 ```text
-POST https://file-host.base44.app/functions/uploadFile
-POST https://file-host.base44.app/functions/createSignedUrl
-POST https://file-host.base44.app/functions/shortenUrl
+POST https://dev-cloud.base44.app/functions/uploadFile
+POST https://dev-cloud.base44.app/functions/createSignedUrl
+POST https://dev-cloud.base44.app/functions/shortenUrl
 ```
 
 ### uploadFile
@@ -68,7 +68,7 @@ password=<opcional>
 
 ### shortenUrl
 
-O bot espera esta interface da Knox Dev Cloud:
+O bot espera esta interface da Dev Cloud:
 
 ```json
 {
@@ -81,7 +81,7 @@ Resposta recomendada:
 
 ```json
 {
-  "short_url": "https://file-host.base44.app/s/AbC123",
+  "short_url": "https://dev-cloud.base44.app/s/AbC123",
   "code": "AbC123",
   "expires_at": "2026-08-27T05:00:00Z"
 }
@@ -108,10 +108,10 @@ DISCORD_TOKEN=TOKEN_DO_BOT
 BOT_NAME=Knox File Host
 SYNC_COMMANDS=true
 
-API_FUNCTIONS_URL=https://file-host.base44.app/functions
-API_UPLOAD_URL=https://file-host.base44.app/functions/uploadFile
-API_SIGNED_URL=https://file-host.base44.app/functions/createSignedUrl
-API_SHORTEN_URL=https://file-host.base44.app/functions/shortenUrl
+API_FUNCTIONS_URL=https://dev-cloud.base44.app/functions
+API_UPLOAD_URL=https://dev-cloud.base44.app/functions/uploadFile
+API_SIGNED_URL=https://dev-cloud.base44.app/functions/createSignedUrl
+API_SHORTEN_URL=https://dev-cloud.base44.app/functions/shortenUrl
 
 API_CONNECT_TIMEOUT=30
 API_READ_TIMEOUT=1800
