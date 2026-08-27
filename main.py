@@ -6,9 +6,8 @@ import sys
 import discord
 from discord.ext import commands
 
-from bot.api_client import OmniHostClient
+from bot.api_client import FileHostClient
 from bot.config import Settings, load_settings
-
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,7 +21,7 @@ class FileHostBot(commands.Bot):
         intents = discord.Intents.default()
         super().__init__(command_prefix=commands.when_mentioned, intents=intents)
         self.settings = settings
-        self.omni_api = OmniHostClient(settings)
+        self.file_host_api = FileHostClient(settings)
 
     async def setup_hook(self) -> None:
         await self.load_extension("bot.cogs.files")
@@ -42,7 +41,7 @@ class FileHostBot(commands.Bot):
         )
 
     async def close(self) -> None:
-        await self.omni_api.close()
+        await self.file_host_api.close()
         await super().close()
 
 
