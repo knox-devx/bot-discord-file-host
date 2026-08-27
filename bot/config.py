@@ -63,7 +63,7 @@ def load_settings() -> Settings:
 
     base_url = os.getenv(
         "API_BASE_URL",
-        "https://slick-omni-host-link.base44.app",
+        "https://file-host.base44.app",
     ).strip().rstrip("/")
     if not _valid_http_url(base_url):
         raise RuntimeError("API_BASE_URL precisa ser uma URL HTTP/HTTPS válida.")
