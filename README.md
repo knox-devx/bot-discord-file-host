@@ -1,14 +1,14 @@
 <div align="center">
 
-<img width="100%" src="https://capsule-render.vercel.app/api?type=waving&height=210&color=0:09090b,45:18181b,100:5865F2&text=Knox%20File%20Host&fontColor=ffffff&fontSize=46&fontAlignY=38&desc=Discord%20Bot%20%E2%80%A2%20Python%20%E2%80%A2%20File%20Host%20API&descAlignY=60" alt="Knox File Host" />
+<img width="100%" src="https://capsule-render.vercel.app/api?type=waving&height=210&color=0:09090b,45:18181b,100:5865F2&text=Knox%20File%20Host&fontColor=ffffff&fontSize=46&fontAlignY=38&desc=Discord%20Bot%20%E2%80%A2%20Python%20%E2%80%A2%20File%20Host%20API%20v1&descAlignY=60" alt="Knox File Host" />
 
 # 𝑲𝒏𝒐𝒙 𝑭𝒊𝒍𝒆 𝑯𝒐𝒔𝒕
 
-**Envie um arquivo pelo Discord. Receba um link público.**
+**Hospede arquivos pelo Discord e receba links permanentes ou temporários.**
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Discord](https://img.shields.io/badge/Discord-Slash%20Commands-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com)
-[![File Host API](https://img.shields.io/badge/API-File%20Host-111827?style=for-the-badge)](https://file-host.base44.app/docs)
+[![File Host API](https://img.shields.io/badge/API-File%20Host%20v1-111827?style=for-the-badge)](https://file-host.base44.app/docs)
 [![License](https://img.shields.io/badge/Licen%C3%A7a-MIT-22c55e?style=for-the-badge)](./LICENSE)
 
 **Criado e mantido por [Knox Dev](https://github.com/knox-devx)**
@@ -17,29 +17,130 @@
 
 ---
 
-## ✨ O que ele faz?
+## ✨ Visão geral
 
-O bot recebe um `discord.Attachment` através do comando `/hospedar`, baixa o arquivo temporariamente, envia para a **File Host API** e devolve o endereço público retornado pela API.
+Este bot usa a **File Host API v1** para receber anexos do Discord e transformá-los em links. A API é pública, não exige login e documenta suporte a arquivos públicos, privados, senha e links temporários.
 
-Ele **não define um limite próprio de tamanho ou quantidade de arquivos**. Na prática continuam existindo os limites externos do Discord, do servidor em que o bot roda e da própria API de hospedagem.
-
-> [!NOTE]
-> Site/documentação atual da API: **https://file-host.base44.app/docs**
+> [!IMPORTANT]
+> A API informa não possuir limite de tamanho ou uso. Porém, quando o arquivo entra pelo Discord, o anexo continua sujeito ao limite de upload imposto pelo próprio Discord.
 
 ## 🚀 Recursos
 
-- 📦 `/hospedar arquivo:<anexo>`
-- 🔗 Botão direto para abrir o arquivo hospedado
-- 👁️ Resposta pública ou privada
-- ♾️ Sem limite artificial de quantidade/tamanho no código do bot
-- 🧠 Descoberta automática de rotas comuns de Backend Functions do Base44
-- ⚙️ Endpoint exato configurável por `.env`
-- 🔑 Suporte opcional a API key
-- 💾 Arquivo temporário removido automaticamente após o envio
-- 🧵 Uploads assíncronos sem travar o bot
-- 🧪 Testes para interpretar diferentes formatos de resposta da API
-- ✅ GitHub Actions para validar o projeto
+- 📦 `/hospedar` com qualquer tipo de anexo aceito pelo Discord
+- 🌐 Arquivos públicos com link permanente
+- 🔒 Arquivos privados
+- ⏳ Link assinado temporário para arquivo privado
+- 🔑 Senha opcional de proteção
+- 👁️ Botão de preview quando `view_url` estiver disponível
+- 🙈 Resposta opcional visível apenas para quem executou o comando
+- 💾 Arquivos temporários locais apagados após o processamento
+- 🧵 Upload assíncrono
 - 🇧🇷 Código e comentários em português
+- 🧪 Testes automatizados
+- ✅ GitHub Actions
+
+---
+
+## 🔌 API utilizada
+
+**URL base das funções:**
+
+```text
+https://file-host.base44.app/functions/
+```
+
+**Documentação:**
+
+```text
+https://file-host.base44.app/docs
+```
+
+### `POST /uploadFile`
+
+Endpoint usado pelo bot:
+
+```text
+https://file-host.base44.app/functions/uploadFile
+```
+
+O bot envia `multipart/form-data` com:
+
+| Campo | Tipo | Uso |
+|---|---|---|
+| `file` | arquivo | obrigatório |
+| `private` | `true` / `false` | define armazenamento privado |
+| `password` | texto | proteção opcional |
+
+Resposta esperada:
+
+```json
+{
+  "id": "abc123",
+  "name": "file.png",
+  "file_url": "https://...",
+  "file_uri": "",
+  "is_private": false,
+  "mime_type": "image/png",
+  "size": 102400,
+  "created_date": "2026-08-26T21:33:00Z",
+  "view_url": "/file/abc123"
+}
+```
+
+### `POST /createSignedUrl`
+
+Endpoint usado automaticamente para arquivos privados:
+
+```text
+https://file-host.base44.app/functions/createSignedUrl
+```
+
+JSON enviado:
+
+```json
+{
+  "file_uri": "FILE_URI",
+  "expires_in": 3600
+}
+```
+
+A API aceita expiração de **60 segundos até 2.592.000 segundos (30 dias)**.
+
+---
+
+## 🎮 Comandos
+
+### `/hospedar`
+
+| Opção | Obrigatória | Padrão | Descrição |
+|---|:---:|---|---|
+| `arquivo` | ✅ | — | anexo que será hospedado |
+| `privado` | ❌ | `false` | salva o arquivo como privado na API |
+| `senha` | ❌ | — | senha de proteção |
+| `expira_em` | ❌ | `3600` | duração do link privado em segundos |
+| `somente_eu` | ❌ | `false` | torna a resposta do Discord privada |
+
+Exemplo público:
+
+```text
+/hospedar arquivo:projeto.zip privado:false
+```
+
+Exemplo privado por 24 horas:
+
+```text
+/hospedar arquivo:backup.zip privado:true expira_em:86400 somente_eu:true
+```
+
+Exemplo protegido por senha:
+
+```text
+/hospedar arquivo:arquivo.pdf senha:minha-senha
+```
+
+### `/sobre`
+
+Mostra informações da API, endpoints e créditos do projeto.
 
 ---
 
@@ -50,66 +151,17 @@ Copie `.env.example` para `.env`:
 ```env
 DISCORD_TOKEN=TOKEN_DO_SEU_BOT
 BOT_NAME=Knox File Host
+SYNC_COMMANDS=true
 
-API_BASE_URL=https://file-host.base44.app
-API_UPLOAD_URL=
-API_FUNCTIONS=upload,upload-file,host-file
+API_FUNCTIONS_URL=https://file-host.base44.app/functions
+API_UPLOAD_URL=https://file-host.base44.app/functions/uploadFile
+API_SIGNED_URL=https://file-host.base44.app/functions/createSignedUrl
 
-API_KEY=
-API_KEY_HEADER=Authorization
-API_KEY_PREFIX=Bearer
+API_CONNECT_TIMEOUT=30
+API_READ_TIMEOUT=1800
 ```
 
-### Qual URL da API é usada?
-
-O domínio atual do serviço é:
-
-```text
-https://file-host.base44.app
-```
-
-A documentação atual está em:
-
-```text
-https://file-host.base44.app/docs
-```
-
-Quando `API_UPLOAD_URL` estiver vazio, o cliente tenta as funções configuradas em `API_FUNCTIONS` usando o formato padrão de Backend Functions:
-
-```text
-https://file-host.base44.app/functions/upload
-https://file-host.base44.app/functions/upload-file
-https://file-host.base44.app/functions/host-file
-```
-
-Também existe um fallback para o formato legado `/base44/functions/...`, evitando quebra caso o backend ainda exponha alguma função antiga por esse caminho.
-
-Se a documentação informar uma rota exata, configure a URL completa:
-
-```env
-API_UPLOAD_URL=https://file-host.base44.app/functions/NOME_EXATO_DA_FUNCAO
-```
-
-Quando `API_UPLOAD_URL` está preenchido, o bot usa **somente essa rota** e não tenta alternativas.
-
-### Formato do upload
-
-O cliente envia o arquivo como:
-
-```text
-Content-Type: multipart/form-data
-campo: file
-```
-
-O cliente reconhece respostas contendo campos como:
-
-```json
-{
-  "file_url": "https://..."
-}
-```
-
-Também aceita `url`, `link`, `download_url`, `public_url`, `fileUrl` e respostas aninhadas em `data`, `result`, `file` ou `upload`.
+A API é pública, portanto **não é necessária API key**.
 
 ---
 
@@ -121,7 +173,7 @@ cd bot-discord-file-host-
 python -m venv .venv
 ```
 
-### Linux
+### Linux/macOS
 
 ```bash
 source .venv/bin/activate
@@ -141,56 +193,19 @@ python main.py
 
 ---
 
-## 🎮 Comandos
-
-| Comando | Descrição |
-|---|---|
-| `/hospedar` | Envia um arquivo para a API e devolve o link |
-| `/sobre` | Exibe informações sobre o serviço e a documentação atual |
-
-### Exemplo
-
-```text
-/hospedar arquivo:meu-projeto.zip privado:false
-```
-
-O retorno inclui nome, tamanho, tipo MIME, link e um botão **Abrir arquivo**.
-
----
-
-## 🗂️ Estrutura
-
-```text
-bot-discord-file-host-/
-├── .github/
-│   └── workflows/
-│       └── ci.yml
-├── bot/
-│   ├── cogs/
-│   │   └── files.py
-│   ├── api_client.py
-│   └── config.py
-├── tests/
-│   └── test_api_client.py
-├── .env.example
-├── .gitignore
-├── LICENSE
-├── README.md
-├── main.py
-└── requirements.txt
-```
-
 ## 🧠 Fluxo
 
 ```mermaid
 flowchart LR
-    A[Usuário] -->|/hospedar + arquivo| B[Discord]
+    A[Usuário] -->|/hospedar| B[Discord]
     B --> C[Bot Python]
     C --> D[Arquivo temporário]
-    D -->|multipart/form-data| E[File Host API]
-    E -->|URL pública| C
-    C -->|Embed + botão| A
-    C --> F[Remove temporário]
+    D -->|POST uploadFile| E[File Host API]
+    E -->|Público: file_url| C
+    E -->|Privado: file_uri| F[createSignedUrl]
+    F -->|signed_url| C
+    C -->|Embed + botões| A
+    C --> G[Apaga temporário]
 ```
 
 ---
@@ -198,13 +213,13 @@ flowchart LR
 ## 🔐 Segurança
 
 - Nunca envie seu `.env` para o GitHub.
-- O token do Discord e uma possível API key ficam fora do repositório.
-- O bot não executa nem abre o conteúdo dos arquivos enviados.
-- O nome original é enviado como metadado do multipart; o caminho temporário local é gerado pelo sistema.
-- Arquivos temporários são apagados após sucesso ou erro.
+- O bot não executa o arquivo enviado.
+- A senha opcional é encaminhada diretamente no multipart e não é exibida na resposta.
+- Arquivos temporários são apagados mesmo quando a API retorna erro.
+- Para conteúdo sensível, use `privado:true` e `somente_eu:true`.
 
-> [!IMPORTANT]
-> Quem hospeda o bot é responsável por cumprir os Termos do Discord, os termos da API utilizada e as leis aplicáveis ao conteúdo armazenado.
+> [!NOTE]
+> Quem opera o bot deve seguir os Termos do Discord, os termos da File Host API e as leis aplicáveis ao conteúdo hospedado.
 
 ---
 
