@@ -107,7 +107,6 @@ class RevealLinkButton(discord.ui.Button):
 
         await _send_full_link_to_interaction(interaction, self.full_url)
 
-        # Se o clique ocorreu dentro de um servidor, envia também uma cópia por DM.
         if interaction.guild is not None:
             await _send_full_link_dm(interaction.user, self.full_url)
 
@@ -157,7 +156,6 @@ class FileHostCog(commands.Cog):
         *,
         expires_in: int | None,
     ) -> tuple[str | None, bool]:
-        """Retorna URL segura para botão e se o encurtador foi usado."""
         if can_use_button_url(full_url):
             return full_url, False
 
@@ -170,8 +168,6 @@ class FileHostCog(commands.Cog):
                 len(shortened.short_url),
             )
         except FileHostError as exc:
-            # O encurtador é um aprimoramento. Upload não deve falhar se ele estiver fora do ar
-            # ou ainda não tiver sido publicado no Base44.
             logger.warning("Não foi possível encurtar o link: %s", exc)
 
         return None, False
@@ -275,7 +271,7 @@ class FileHostCog(commands.Cog):
                 if shortened:
                     embed.add_field(
                         name="🔗 Encurtador",
-                        value="O link original excedia o limite do Discord e foi encurtado pela **Knox Dev Cloud**.",
+                        value="O link original excedia o limite do Discord e foi encurtado pela **Dev Cloud**.",
                         inline=False,
                     )
 
@@ -410,13 +406,13 @@ class FileHostCog(commands.Cog):
         embed = discord.Embed(
             title=f"📦 {self.settings.bot_name}",
             description=(
-                "Hospeda arquivos pelo Discord usando a **File Host API / Knox Dev Cloud**.\n\n"
+                "Hospeda arquivos pelo Discord usando a **File Host API / Dev Cloud**.\n\n"
                 "• upload público e privado\n"
                 "• links temporários assinados\n"
                 "• senha opcional\n"
                 "• encurtamento automático de links grandes\n"
                 "• resultado por DM + resposta ephemeral\n\n"
-                "Documentação: https://file-host.base44.app/docs"
+                "Documentação: https://dev-cloud.base44.app/docs"
             ),
             color=discord.Color.blurple(),
         )
