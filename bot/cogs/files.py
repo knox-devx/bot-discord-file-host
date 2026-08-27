@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 import tempfile
 from pathlib import Path
@@ -13,6 +14,10 @@ from bot.api_client import FileHostClient, FileHostError, MAX_SIGNED_URL_SECONDS
 from bot.config import Settings
 
 logger = logging.getLogger(__name__)
+
+DISCORD_BUTTON_URL_MAX = 512
+DISCORD_EMBED_FIELD_MAX = 1024
+DISCORD_MESSAGE_CONTENT_MAX = 2000
 
 
 def format_bytes(size: int) -> str:
@@ -43,12 +48,50 @@ def safe_filename(name: str) -> str:
     return cleaned[:180] or "arquivo.bin"
 
 
+def can_use_button_url(url: str | None) -> bool:
+    """O Discord limita URLs de botões a 512 caracteres."""
+    return bool(url) and len(url) <= DISCORD_BUTTON_URL_MAX
+
+
+def embed_link_value(url: str) -> str:
+    """Evita ultrapassar o limite de 1024 caracteres de um campo de embed."""
+    if len(url) <= DISCORD_EMBED_FIELD_MAX:
+        return url
+    return "🔗 O link é muito longo para caber neste campo. Ele foi enviado junto da mensagem."
+
+
+def message_link_content(url: str) -> str | None:
+    """Quando a URL não cabe no embed, tenta entregá-la no conteúdo da mensagem."""
+    if len(url) <= DISCORD_EMBED_FIELD_MAX:
+        return None
+    if len(url) <= DISCORD_MESSAGE_CONTENT_MAX:
+        return url
+    return "🔗 O link completo está no arquivo `link.txt` anexado a esta mensagem."
+
+
+def link_text_file(url: str) -> discord.File | None:
+    """Fallback extremo para URLs maiores que o limite de conteúdo do Discord."""
+    if len(url) <= DISCORD_MESSAGE_CONTENT_MAX:
+        return None
+    return discord.File(io.BytesIO(url.encode("utf-8")), filename="link.txt")
+
+
 class LinkView(discord.ui.View):
     def __init__(self, file_url: str, view_url: str | None = None) -> None:
         super().__init__(timeout=None)
-        self.add_item(discord.ui.Button(label="Abrir arquivo", url=file_url, emoji="🔗"))
-        if view_url and view_url != file_url:
+
+        # Signed URLs podem ser maiores que 512 caracteres. Nesse caso o link
+        # continua sendo entregue no embed/conteúdo, mas não pode virar botão.
+        if can_use_button_url(file_url):
+            self.add_item(discord.ui.Button(label="Abrir arquivo", url=file_url, emoji="🔗"))
+
+        if view_url and view_url != file_url and can_use_button_url(view_url):
             self.add_item(discord.ui.Button(label="Preview", url=view_url, emoji="👁️"))
+
+
+def make_link_view(file_url: str, view_url: str | None = None) -> LinkView | None:
+    view = LinkView(file_url, view_url)
+    return view if view.children else None
 
 
 class FileHostCog(commands.Cog):
@@ -152,7 +195,7 @@ class FileHostCog(commands.Cog):
                 )
 
                 if signed:
-                    embed.add_field(name="Link temporário", value=final_url, inline=False)
+                    embed.add_field(name="Link temporário", value=embed_link_value(final_url), inline=False)
                     embed.add_field(
                         name="Expiração",
                         value=(
@@ -162,7 +205,17 @@ class FileHostCog(commands.Cog):
                         inline=False,
                     )
                 else:
-                    embed.add_field(name="Link permanente", value=final_url, inline=False)
+                    embed.add_field(name="Link permanente", value=embed_link_value(final_url), inline=False)
+
+                if len(final_url) > DISCORD_BUTTON_URL_MAX:
+                    embed.add_field(
+                        name="ℹ️ Link longo",
+                        value=(
+                            "O Discord limita URLs de botões a 512 caracteres. Por isso o botão "
+                            "**Abrir arquivo** foi omitido, mas o link continua disponível normalmente."
+                        ),
+                        inline=False,
+                    )
 
                 if password:
                     embed.add_field(
@@ -174,14 +227,18 @@ class FileHostCog(commands.Cog):
                 embed.add_field(name="ID", value=f"`{upload.id}`", inline=True)
                 embed.set_footer(text="Criado e mantido por Knox Dev")
 
+                link_content = message_link_content(final_url)
+
                 # Envia uma cópia por DM. Se o comando já foi usado em DM,
                 # a própria resposta da interação já atende esse destino.
                 dm_sent = interaction.guild is None
                 if interaction.guild is not None:
                     try:
                         await interaction.user.send(
+                            content=link_content,
                             embed=embed.copy(),
-                            view=LinkView(final_url, preview_url),
+                            view=make_link_view(final_url, preview_url),
+                            file=link_text_file(final_url),
                         )
                         dm_sent = True
                     except (discord.Forbidden, discord.HTTPException) as exc:
@@ -210,8 +267,10 @@ class FileHostCog(commands.Cog):
 
                 # No canal/servidor, somente quem executou o comando consegue ver esta mensagem.
                 await interaction.followup.send(
+                    content=link_content,
                     embed=local_embed,
-                    view=LinkView(final_url, preview_url),
+                    view=make_link_view(final_url, preview_url),
+                    file=link_text_file(final_url),
                     ephemeral=True,
                 )
 
