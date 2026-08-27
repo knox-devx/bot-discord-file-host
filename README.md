@@ -4,7 +4,7 @@
 
 # 𝑲𝒏𝒐𝒙 𝑭𝒊𝒍𝒆 𝑯𝒐𝒔𝒕
 
-**Hospede arquivos pelo Discord e receba links permanentes ou temporários.**
+**Hospede arquivos pelo Discord e receba o link no comando e na DM.**
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Discord](https://img.shields.io/badge/Discord-Slash%20Commands-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com)
@@ -21,6 +21,13 @@
 
 Este bot usa a **File Host API v1** para receber anexos do Discord e transformá-los em links. A API é pública, não exige login e documenta suporte a arquivos públicos, privados, senha e links temporários.
 
+Ao concluir um upload, o bot entrega o resultado em **dois lugares automaticamente**:
+
+1. na **DM do usuário**;
+2. no canal onde `/hospedar` foi usado como resposta **ephemeral**, visível somente para quem executou o comando.
+
+Se a DM estiver bloqueada, o upload continua funcionando e o resultado permanece disponível na resposta ephemeral.
+
 > [!IMPORTANT]
 > A API informa não possuir limite de tamanho ou uso. Porém, quando o arquivo entra pelo Discord, o anexo continua sujeito ao limite de upload imposto pelo próprio Discord.
 
@@ -32,7 +39,9 @@ Este bot usa a **File Host API v1** para receber anexos do Discord e transformá
 - ⏳ Link assinado temporário para arquivo privado
 - 🔑 Senha opcional de proteção
 - 👁️ Botão de preview quando `view_url` estiver disponível
-- 🙈 Resposta opcional visível apenas para quem executou o comando
+- 📩 Cópia automática do resultado por DM
+- 🙈 Resposta no canal sempre ephemeral
+- 🛟 Upload não falha caso a DM esteja bloqueada
 - 💾 Arquivos temporários locais apagados após o processamento
 - 🧵 Upload assíncrono
 - 🇧🇷 Código e comentários em português
@@ -87,6 +96,8 @@ Resposta esperada:
 }
 ```
 
+Caminhos relativos como `/file/abc123` são convertidos automaticamente para URL absoluta antes de serem usados no botão **Preview** do Discord.
+
 ### `POST /createSignedUrl`
 
 Endpoint usado automaticamente para arquivos privados:
@@ -118,7 +129,8 @@ A API aceita expiração de **60 segundos até 2.592.000 segundos (30 dias)**.
 | `privado` | ❌ | `false` | salva o arquivo como privado na API |
 | `senha` | ❌ | — | senha de proteção |
 | `expira_em` | ❌ | `3600` | duração do link privado em segundos |
-| `somente_eu` | ❌ | `false` | torna a resposta do Discord privada |
+
+A resposta no servidor é **sempre privada (ephemeral)** e uma cópia é enviada automaticamente para a DM do usuário.
 
 Exemplo público:
 
@@ -129,7 +141,7 @@ Exemplo público:
 Exemplo privado por 24 horas:
 
 ```text
-/hospedar arquivo:backup.zip privado:true expira_em:86400 somente_eu:true
+/hospedar arquivo:backup.zip privado:true expira_em:86400
 ```
 
 Exemplo protegido por senha:
@@ -140,7 +152,7 @@ Exemplo protegido por senha:
 
 ### `/sobre`
 
-Mostra informações da API, endpoints e créditos do projeto.
+Mostra informações da API, endpoints, comportamento de entrega e créditos do projeto.
 
 ---
 
@@ -204,7 +216,8 @@ flowchart LR
     E -->|Público: file_url| C
     E -->|Privado: file_uri| F[createSignedUrl]
     F -->|signed_url| C
-    C -->|Embed + botões| A
+    C -->|DM com link| A
+    C -->|Resposta ephemeral no canal| B
     C --> G[Apaga temporário]
 ```
 
@@ -216,7 +229,8 @@ flowchart LR
 - O bot não executa o arquivo enviado.
 - A senha opcional é encaminhada diretamente no multipart e não é exibida na resposta.
 - Arquivos temporários são apagados mesmo quando a API retorna erro.
-- Para conteúdo sensível, use `privado:true` e `somente_eu:true`.
+- A resposta do slash command no servidor é sempre ephemeral.
+- Para conteúdo sensível, use `privado:true`; o link temporário privado também será enviado por DM quando possível.
 
 > [!NOTE]
 > Quem opera o bot deve seguir os Termos do Discord, os termos da File Host API e as leis aplicáveis ao conteúdo hospedado.
