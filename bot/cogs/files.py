@@ -117,7 +117,11 @@ class FileHostCog(commands.Cog):
                             "A API marcou o arquivo como privado, mas não retornou file_uri "
                             "para criar o link temporário."
                         )
-                    signed = await self.api.create_signed_url(upload.file_uri, expires_in=expires_in)
+                    signed = await self.api.create_signed_url(
+                        upload.file_uri,
+                        expires_in=expires_in,
+                        password=password,
+                    )
                     final_url = signed.signed_url
 
                 if not final_url:
