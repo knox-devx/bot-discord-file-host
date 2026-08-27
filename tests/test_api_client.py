@@ -3,6 +3,7 @@ from bot.api_client import (
     FileHostError,
     absolute_view_url,
     build_signed_request_payload,
+    parse_shorten_payload,
     parse_signed_payload,
     parse_upload_payload,
     validate_expiry,
@@ -68,6 +69,29 @@ def test_parse_signed_url_response() -> None:
     )
     assert result.signed_url == "https://cdn.example.com/signed"
     assert result.expires_in == 3600
+
+
+def test_parse_shorten_url_response() -> None:
+    result = parse_shorten_payload(
+        {
+            "short_url": "https://file-host.base44.app/s/AbC123",
+            "code": "AbC123",
+            "expires_at": "2026-08-26T22:33:00Z",
+        },
+        endpoint="https://file-host.base44.app/functions/shortenUrl",
+        status=200,
+    )
+    assert result.short_url == "https://file-host.base44.app/s/AbC123"
+    assert result.code == "AbC123"
+
+
+def test_shorten_parser_accepts_url_alias() -> None:
+    result = parse_shorten_payload(
+        {"url": "https://file-host.base44.app/s/test"},
+        endpoint="https://file-host.base44.app/functions/shortenUrl",
+        status=200,
+    )
+    assert result.short_url.endswith("/s/test")
 
 
 def test_signed_request_includes_password_when_protected() -> None:
