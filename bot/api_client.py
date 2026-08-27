@@ -16,7 +16,7 @@ MIN_SIGNED_URL_SECONDS = 60
 
 
 class FileHostError(RuntimeError):
-    """Erro amigável retornado pelo cliente da File Host API."""
+    """Erro amigável retornado pelo cliente da File Host / Knox Dev Cloud API."""
 
 
 @dataclass(slots=True, frozen=True)
@@ -39,6 +39,16 @@ class UploadResult:
 class SignedUrlResult:
     signed_url: str
     expires_in: int
+    expires_at: str | None
+    endpoint: str
+    status: int
+    raw: dict[str, Any]
+
+
+@dataclass(slots=True, frozen=True)
+class ShortenResult:
+    short_url: str
+    code: str | None
     expires_at: str | None
     endpoint: str
     status: int
@@ -168,6 +178,27 @@ def parse_signed_payload(payload: Any, *, endpoint: str, status: int) -> SignedU
     )
 
 
+def parse_shorten_payload(payload: Any, *, endpoint: str, status: int) -> ShortenResult:
+    if not isinstance(payload, dict):
+        raise FileHostError("O encurtador respondeu, mas o corpo não é um objeto JSON.")
+
+    short_raw = payload.get("short_url") or payload.get("shortUrl") or payload.get("url") or payload.get("link")
+    if not isinstance(short_raw, str) or not _is_http_url(short_raw.strip()):
+        raise FileHostError("O encurtador não retornou um 'short_url' HTTP/HTTPS válido.")
+
+    code = payload.get("code")
+    expires_at = payload.get("expires_at") or payload.get("expiresAt")
+
+    return ShortenResult(
+        short_url=short_raw.strip(),
+        code=str(code).strip() if code is not None and str(code).strip() else None,
+        expires_at=expires_at if isinstance(expires_at, str) else None,
+        endpoint=endpoint,
+        status=status,
+        raw=payload,
+    )
+
+
 class FileHostClient:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -255,6 +286,36 @@ class FileHostClient:
                 return parse_signed_payload(payload, endpoint=str(response.url), status=response.status)
         except (aiohttp.ClientError, TimeoutError) as exc:
             raise FileHostError(f"Falha de rede ao chamar createSignedUrl: {type(exc).__name__}.") from exc
+
+    async def shorten_url(
+        self,
+        target_url: str,
+        *,
+        expires_in: int | None = None,
+    ) -> ShortenResult:
+        """POST /shortenUrl da Knox Dev Cloud para links que excedem limites do Discord."""
+        clean_url = target_url.strip()
+        if not _is_http_url(clean_url):
+            raise FileHostError("Não é possível encurtar uma URL HTTP/HTTPS inválida.")
+
+        request_payload: dict[str, Any] = {"url": clean_url}
+        if expires_in is not None:
+            request_payload["expires_in"] = expires_in
+
+        session = await self._get_session()
+        try:
+            async with session.post(
+                self.settings.api_shorten_url,
+                json=request_payload,
+                allow_redirects=True,
+            ) as response:
+                payload = await self._read_json(response)
+                if response.status < 200 or response.status >= 300:
+                    raise FileHostError(self._http_error("shortenUrl", response.status, payload))
+
+                return parse_shorten_payload(payload, endpoint=str(response.url), status=response.status)
+        except (aiohttp.ClientError, TimeoutError) as exc:
+            raise FileHostError(f"Falha de rede ao chamar shortenUrl: {type(exc).__name__}.") from exc
 
     async def _read_json(self, response: aiohttp.ClientResponse) -> Any:
         text = await response.text(errors="replace")
