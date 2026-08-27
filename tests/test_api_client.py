@@ -2,6 +2,7 @@ from bot.api_client import (
     MAX_SIGNED_URL_SECONDS,
     FileHostError,
     absolute_view_url,
+    build_signed_request_payload,
     parse_signed_payload,
     parse_upload_payload,
     validate_expiry,
@@ -67,6 +68,27 @@ def test_parse_signed_url_response() -> None:
     )
     assert result.signed_url == "https://cdn.example.com/signed"
     assert result.expires_in == 3600
+
+
+def test_signed_request_includes_password_when_protected() -> None:
+    payload = build_signed_request_payload(
+        " private://secret.zip ",
+        expires_in=3600,
+        password="secret123",
+    )
+    assert payload == {
+        "file_uri": "private://secret.zip",
+        "expires_in": 3600,
+        "password": "secret123",
+    }
+
+
+def test_signed_request_omits_password_when_not_protected() -> None:
+    payload = build_signed_request_payload("private://secret.zip", expires_in=60)
+    assert payload == {
+        "file_uri": "private://secret.zip",
+        "expires_in": 60,
+    }
 
 
 def test_expiry_range() -> None:
