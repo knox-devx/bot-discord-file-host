@@ -1,15 +1,12 @@
 <div align="center">
 
-<img width="100%" src="https://capsule-render.vercel.app/api?type=waving&height=210&color=0:09090b,45:18181b,100:5865F2&text=Knox%20File%20Host&fontColor=ffffff&fontSize=46&fontAlignY=38&desc=Discord%20Bot%20%E2%80%A2%20Python%20%E2%80%A2%20File%20Host%20API%20v1&descAlignY=60" alt="Knox File Host" />
+# Knox File Host
 
-# 𝑲𝒏𝒐𝒙 𝑭𝒊𝒍𝒆 𝑯𝒐𝒔𝒕
-
-**Hospede arquivos pelo Discord e receba o link no comando e na DM.**
+**Discord Bot • Python • Knox Dev Cloud / File Host API**
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Discord](https://img.shields.io/badge/Discord-Slash%20Commands-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com)
-[![File Host API](https://img.shields.io/badge/API-File%20Host%20v1-111827?style=for-the-badge)](https://file-host.base44.app/docs)
-[![License](https://img.shields.io/badge/Licen%C3%A7a-MIT-22c55e?style=for-the-badge)](./LICENSE)
+[![API](https://img.shields.io/badge/API-Knox%20Dev%20Cloud-111827?style=for-the-badge)](https://file-host.base44.app/docs)
 
 **Criado e mantido por [Knox Dev](https://github.com/knox-devx)**
 
@@ -17,246 +14,144 @@
 
 ---
 
-## ✨ Visão geral
+## Visão geral
 
-Este bot usa a **File Host API v1** para receber anexos do Discord e transformá-los em links. A API é pública, não exige login e documenta suporte a arquivos públicos, privados, senha e links temporários.
+O bot hospeda anexos do Discord usando a File Host API e entrega o resultado em dois lugares:
 
-Ao concluir um upload, o bot entrega o resultado em **dois lugares automaticamente**:
-
-1. na **DM do usuário**;
+1. por **DM**;
 2. no canal onde `/hospedar` foi usado como resposta **ephemeral**, visível somente para quem executou o comando.
 
-Se a DM estiver bloqueada, o upload continua funcionando e o resultado permanece disponível na resposta ephemeral.
+Ele suporta arquivos públicos, privados, senha e links temporários assinados.
 
-> [!IMPORTANT]
-> A API informa não possuir limite de tamanho ou uso. Porém, quando o arquivo entra pelo Discord, o anexo continua sujeito ao limite de upload imposto pelo próprio Discord.
+## Fluxo de links grandes
 
-## 🚀 Recursos
+O Discord limita URLs de botões a **512 caracteres**. Signed URLs privadas podem ultrapassar esse limite.
 
-- 📦 `/hospedar` com qualquer tipo de anexo aceito pelo Discord
-- 🌐 Arquivos públicos com link permanente
-- 🔒 Arquivos privados
-- ⏳ Link assinado temporário para arquivo privado
-- 🔑 Senha opcional de proteção
-- 👁️ Botão de preview quando `view_url` estiver disponível
-- 📩 Cópia automática do resultado por DM
-- 🙈 Resposta no canal sempre ephemeral
-- 🛟 Upload não falha caso a DM esteja bloqueada
-- 🔗 Tratamento automático de signed URLs maiores que o limite de botão do Discord
-- 💾 Arquivos temporários locais apagados após o processamento
-- 🧵 Upload assíncrono
-- 🇧🇷 Código e comentários em português
-- 🧪 Testes automatizados
-- ✅ GitHub Actions
+O bot resolve isso automaticamente:
 
----
+1. gera o `signed_url` normalmente;
+2. se ele couber em 512 caracteres, cria o botão **Abrir arquivo** diretamente;
+3. se passar de 512, chama `POST /functions/shortenUrl` da **Knox Dev Cloud**;
+4. se o link encurtado couber, usa o link curto no botão;
+5. se o encurtador estiver indisponível, ainda não tiver sido publicado ou retornar um link grande demais, o bot mostra o botão **Receber link**;
+6. ao clicar em **Receber link**, somente o dono do upload recebe o link completo e o bot também tenta enviar uma cópia por DM.
 
-## 🔌 API utilizada
+Assim o upload não falha por causa de `400 Invalid Form Body` do Discord.
 
-**URL base das funções:**
+## Endpoints usados
 
 ```text
-https://file-host.base44.app/functions/
+POST https://file-host.base44.app/functions/uploadFile
+POST https://file-host.base44.app/functions/createSignedUrl
+POST https://file-host.base44.app/functions/shortenUrl
 ```
 
-**Documentação:**
+### uploadFile
+
+`multipart/form-data`:
 
 ```text
-https://file-host.base44.app/docs
+file=<arquivo>
+private=true|false
+password=<opcional>
 ```
 
-### `POST /uploadFile`
-
-Endpoint usado pelo bot:
-
-```text
-https://file-host.base44.app/functions/uploadFile
-```
-
-O bot envia `multipart/form-data` com:
-
-| Campo | Tipo | Uso |
-|---|---|---|
-| `file` | arquivo | obrigatório |
-| `private` | `true` / `false` | define armazenamento privado |
-| `password` | texto | proteção opcional |
-
-Resposta esperada:
-
-```json
-{
-  "id": "abc123",
-  "name": "file.png",
-  "file_url": "https://...",
-  "file_uri": "",
-  "is_private": false,
-  "mime_type": "image/png",
-  "size": 102400,
-  "created_date": "2026-08-26T21:33:00Z",
-  "view_url": "/file/abc123"
-}
-```
-
-Caminhos relativos como `/file/abc123` são convertidos automaticamente para URL absoluta antes de serem usados no botão **Preview** do Discord.
-
-### `POST /createSignedUrl`
-
-Endpoint usado automaticamente para arquivos privados:
-
-```text
-https://file-host.base44.app/functions/createSignedUrl
-```
-
-JSON enviado:
+### createSignedUrl
 
 ```json
 {
   "file_uri": "FILE_URI",
   "expires_in": 3600,
-  "password": "SENHA_SE_O_ARQUIVO_FOR_PROTEGIDO"
+  "password": "SENHA_SE_EXISTIR"
 }
 ```
 
-`password` só é incluído quando uma senha foi usada no upload. A API aceita expiração de **60 segundos até 2.592.000 segundos (30 dias)**.
+### shortenUrl
 
-### URLs longas do Discord
+O bot espera esta interface da Knox Dev Cloud:
 
-O Discord limita URLs de botões a **512 caracteres**. Signed URLs podem ultrapassar esse tamanho.
-
-Quando isso acontece, o bot:
-
-- não cria o botão **Abrir arquivo** para a URL longa;
-- mantém o botão **Preview** quando ele couber no limite;
-- mostra a URL normalmente no embed enquanto ela couber no campo;
-- se passar de 1024 caracteres, envia a URL no conteúdo da mensagem;
-- em um caso extremo acima de 2000 caracteres, anexa a URL em `link.txt` em vez de falhar com `400 Invalid Form Body`.
-
----
-
-## 🎮 Comandos
-
-### `/hospedar`
-
-| Opção | Obrigatória | Padrão | Descrição |
-|---|:---:|---|---|
-| `arquivo` | ✅ | — | anexo que será hospedado |
-| `privado` | ❌ | `false` | salva o arquivo como privado na API |
-| `senha` | ❌ | — | senha de proteção |
-| `expira_em` | ❌ | `3600` | duração do link privado em segundos |
-
-A resposta no servidor é **sempre privada (ephemeral)** e uma cópia é enviada automaticamente para a DM do usuário.
-
-Exemplo público:
-
-```text
-/hospedar arquivo:projeto.zip privado:false
+```json
+{
+  "url": "https://link-original-muito-grande...",
+  "expires_in": 3600
+}
 ```
 
-Exemplo privado por 24 horas:
+Resposta recomendada:
 
-```text
-/hospedar arquivo:backup.zip privado:true expira_em:86400
+```json
+{
+  "short_url": "https://file-host.base44.app/s/AbC123",
+  "code": "AbC123",
+  "expires_at": "2026-08-27T05:00:00Z"
+}
 ```
 
-Exemplo protegido por senha:
+O bot também reconhece `shortUrl`, `url` ou `link` como aliases de `short_url`.
+
+## Comando
 
 ```text
-/hospedar arquivo:arquivo.pdf privado:true senha:minha-senha
+/hospedar arquivo:<anexo> privado:<true|false> senha:<opcional> expira_em:<60..2592000>
 ```
 
-### `/sobre`
+Exemplo:
 
-Mostra informações da API, endpoints, comportamento de entrega e créditos do projeto.
+```text
+/hospedar arquivo:backup.zip privado:true senha:minha-senha expira_em:3600
+```
 
----
-
-## ⚙️ Configuração
-
-Copie `.env.example` para `.env`:
+## Configuração
 
 ```env
-DISCORD_TOKEN=TOKEN_DO_SEU_BOT
+DISCORD_TOKEN=TOKEN_DO_BOT
 BOT_NAME=Knox File Host
 SYNC_COMMANDS=true
 
 API_FUNCTIONS_URL=https://file-host.base44.app/functions
 API_UPLOAD_URL=https://file-host.base44.app/functions/uploadFile
 API_SIGNED_URL=https://file-host.base44.app/functions/createSignedUrl
+API_SHORTEN_URL=https://file-host.base44.app/functions/shortenUrl
 
 API_CONNECT_TIMEOUT=30
 API_READ_TIMEOUT=1800
 ```
 
-A API é pública, portanto **não é necessária API key**.
-
----
-
-## 📥 Instalação
+## Instalação
 
 ```bash
 git clone https://github.com/knox-devx/bot-discord-file-host.git
 cd bot-discord-file-host
-python -m venv .venv
+pip install -r requirements.txt
+python3 main.py
 ```
 
-### Linux/macOS
+## Wispbyte
+
+Startup recomendado quando as dependências ainda precisam ser instaladas:
 
 ```bash
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-python main.py
+python3 -m pip install --user --no-cache-dir -r requirements.txt && python3 main.py
 ```
 
-### Windows
+Depois que as dependências já estiverem presentes:
 
-```powershell
-.venv\Scripts\activate
-pip install -r requirements.txt
-copy .env.example .env
-python main.py
+```bash
+python3 main.py
 ```
 
----
+## Segurança
 
-## 🧠 Fluxo
-
-```mermaid
-flowchart LR
-    A[Usuário] -->|/hospedar| B[Discord]
-    B --> C[Bot Python]
-    C --> D[Arquivo temporário]
-    D -->|POST uploadFile| E[File Host API]
-    E -->|Público: file_url| C
-    E -->|Privado: file_uri| F[createSignedUrl]
-    F -->|signed_url| C
-    C -->|DM com link| A
-    C -->|Resposta ephemeral no canal| B
-    C --> G[Apaga temporário]
-```
-
----
-
-## 🔐 Segurança
-
-- Nunca envie seu `.env` para o GitHub.
-- O bot não executa o arquivo enviado.
-- A senha opcional é encaminhada para `uploadFile` e, quando necessário, para `createSignedUrl`; ela não é exibida na resposta.
-- Arquivos temporários são apagados mesmo quando a API retorna erro.
-- A resposta do slash command no servidor é sempre ephemeral.
-- Para conteúdo sensível, use `privado:true`; o link temporário privado também será enviado por DM quando possível.
-
-> [!NOTE]
-> Quem opera o bot deve seguir os Termos do Discord, os termos da File Host API e as leis aplicáveis ao conteúdo hospedado.
+- a senha não é exibida nas respostas;
+- o link completo de fallback só é entregue ao usuário que iniciou o upload;
+- respostas no servidor são ephemeral;
+- arquivos temporários locais são removidos após processamento;
+- se a DM estiver bloqueada, o upload continua funcionando.
 
 ---
 
 <div align="center">
 
-### ✦ Knox Dev ✦
-
-**Python • Discord • File Hosting**
-
-<img width="100%" src="https://capsule-render.vercel.app/api?type=waving&height=100&section=footer&color=0:5865F2,100:09090b" alt="footer" />
+**Knox Dev • File Hosting • Dev Cloud**
 
 </div>
