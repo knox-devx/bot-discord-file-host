@@ -42,6 +42,7 @@ Se a DM estiver bloqueada, o upload continua funcionando e o resultado permanece
 - 📩 Cópia automática do resultado por DM
 - 🙈 Resposta no canal sempre ephemeral
 - 🛟 Upload não falha caso a DM esteja bloqueada
+- 🔗 Tratamento automático de signed URLs maiores que o limite de botão do Discord
 - 💾 Arquivos temporários locais apagados após o processamento
 - 🧵 Upload assíncrono
 - 🇧🇷 Código e comentários em português
@@ -111,11 +112,24 @@ JSON enviado:
 ```json
 {
   "file_uri": "FILE_URI",
-  "expires_in": 3600
+  "expires_in": 3600,
+  "password": "SENHA_SE_O_ARQUIVO_FOR_PROTEGIDO"
 }
 ```
 
-A API aceita expiração de **60 segundos até 2.592.000 segundos (30 dias)**.
+`password` só é incluído quando uma senha foi usada no upload. A API aceita expiração de **60 segundos até 2.592.000 segundos (30 dias)**.
+
+### URLs longas do Discord
+
+O Discord limita URLs de botões a **512 caracteres**. Signed URLs podem ultrapassar esse tamanho.
+
+Quando isso acontece, o bot:
+
+- não cria o botão **Abrir arquivo** para a URL longa;
+- mantém o botão **Preview** quando ele couber no limite;
+- mostra a URL normalmente no embed enquanto ela couber no campo;
+- se passar de 1024 caracteres, envia a URL no conteúdo da mensagem;
+- em um caso extremo acima de 2000 caracteres, anexa a URL em `link.txt` em vez de falhar com `400 Invalid Form Body`.
 
 ---
 
@@ -147,7 +161,7 @@ Exemplo privado por 24 horas:
 Exemplo protegido por senha:
 
 ```text
-/hospedar arquivo:arquivo.pdf senha:minha-senha
+/hospedar arquivo:arquivo.pdf privado:true senha:minha-senha
 ```
 
 ### `/sobre`
@@ -180,8 +194,8 @@ A API é pública, portanto **não é necessária API key**.
 ## 📥 Instalação
 
 ```bash
-git clone https://github.com/knox-devx/bot-discord-file-host-.git
-cd bot-discord-file-host-
+git clone https://github.com/knox-devx/bot-discord-file-host.git
+cd bot-discord-file-host
 python -m venv .venv
 ```
 
@@ -227,7 +241,7 @@ flowchart LR
 
 - Nunca envie seu `.env` para o GitHub.
 - O bot não executa o arquivo enviado.
-- A senha opcional é encaminhada diretamente no multipart e não é exibida na resposta.
+- A senha opcional é encaminhada para `uploadFile` e, quando necessário, para `createSignedUrl`; ela não é exibida na resposta.
 - Arquivos temporários são apagados mesmo quando a API retorna erro.
 - A resposta do slash command no servidor é sempre ephemeral.
 - Para conteúdo sensível, use `privado:true`; o link temporário privado também será enviado por DM quando possível.
