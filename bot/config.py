@@ -35,25 +35,20 @@ def _valid_http_url(value: str) -> bool:
 class Settings:
     discord_token: str
     bot_name: str
-    api_base_url: str
-    api_upload_url: str | None
-    api_functions: tuple[str, ...]
-    api_key: str | None
-    api_key_header: str
-    api_key_prefix: str
+    api_functions_url: str
+    api_upload_url: str
+    api_signed_url: str
     connect_timeout: int
     read_timeout: int
     sync_commands: bool
 
     @property
-    def api_headers(self) -> dict[str, str]:
-        if not self.api_key:
-            return {}
-
-        value = self.api_key
-        if self.api_key_prefix:
-            value = f"{self.api_key_prefix} {value}"
-        return {self.api_key_header: value}
+    def site_url(self) -> str:
+        marker = "/functions"
+        if marker in self.api_functions_url:
+            return self.api_functions_url.split(marker, 1)[0]
+        parsed = urlparse(self.api_functions_url)
+        return f"{parsed.scheme}://{parsed.netloc}"
 
 
 def load_settings() -> Settings:
@@ -61,36 +56,33 @@ def load_settings() -> Settings:
     if not token:
         raise RuntimeError("DISCORD_TOKEN não foi definido no .env.")
 
-    base_url = os.getenv(
-        "API_BASE_URL",
-        "https://file-host.base44.app",
+    functions_url = os.getenv(
+        "API_FUNCTIONS_URL",
+        "https://file-host.base44.app/functions",
     ).strip().rstrip("/")
-    if not _valid_http_url(base_url):
-        raise RuntimeError("API_BASE_URL precisa ser uma URL HTTP/HTTPS válida.")
+    if not _valid_http_url(functions_url):
+        raise RuntimeError("API_FUNCTIONS_URL precisa ser uma URL HTTP/HTTPS válida.")
 
-    exact_upload_url = os.getenv("API_UPLOAD_URL", "").strip() or None
-    if exact_upload_url and not _valid_http_url(exact_upload_url):
+    upload_url = os.getenv("API_UPLOAD_URL", "").strip() or f"{functions_url}/uploadFile"
+    signed_url = os.getenv("API_SIGNED_URL", "").strip() or f"{functions_url}/createSignedUrl"
+
+    if not _valid_http_url(upload_url):
         raise RuntimeError("API_UPLOAD_URL precisa ser uma URL HTTP/HTTPS válida.")
+    if not _valid_http_url(signed_url):
+        raise RuntimeError("API_SIGNED_URL precisa ser uma URL HTTP/HTTPS válida.")
 
-    raw_functions = os.getenv("API_FUNCTIONS", "upload,upload-file,host-file")
-    functions = tuple(
-        item.strip().strip("/")
-        for item in raw_functions.split(",")
-        if item.strip().strip("/")
-    )
-    if not functions and exact_upload_url is None:
-        raise RuntimeError("Defina API_UPLOAD_URL ou ao menos uma função em API_FUNCTIONS.")
+    connect_timeout = _env_int("API_CONNECT_TIMEOUT", 30)
+    read_timeout = _env_int("API_READ_TIMEOUT", 1800)
+    if connect_timeout <= 0 or read_timeout <= 0:
+        raise RuntimeError("Os timeouts da API precisam ser maiores que zero.")
 
     return Settings(
         discord_token=token,
         bot_name=os.getenv("BOT_NAME", "Knox File Host").strip() or "Knox File Host",
-        api_base_url=base_url,
-        api_upload_url=exact_upload_url,
-        api_functions=functions,
-        api_key=os.getenv("API_KEY", "").strip() or None,
-        api_key_header=os.getenv("API_KEY_HEADER", "Authorization").strip() or "Authorization",
-        api_key_prefix=os.getenv("API_KEY_PREFIX", "Bearer").strip(),
-        connect_timeout=_env_int("API_CONNECT_TIMEOUT", 30),
-        read_timeout=_env_int("API_READ_TIMEOUT", 1800),
+        api_functions_url=functions_url,
+        api_upload_url=upload_url,
+        api_signed_url=signed_url,
+        connect_timeout=connect_timeout,
+        read_timeout=read_timeout,
         sync_commands=_env_bool("SYNC_COMMANDS", True),
     )
