@@ -61,6 +61,16 @@ class FileHostCog(commands.Cog):
     def _lock_for(self, user_id: int) -> asyncio.Lock:
         return self._user_locks.setdefault(user_id, asyncio.Lock())
 
+    def _absolute_view_url(self, view_url: str | None) -> str | None:
+        """Converte caminhos como /file/abc123 em URL absoluta para os botões do Discord."""
+        if not view_url:
+            return None
+        if view_url.startswith("https://") or view_url.startswith("http://"):
+            return view_url
+        if view_url.startswith("/"):
+            return f"{self.settings.site_url}{view_url}"
+        return f"{self.settings.site_url}/{view_url.lstrip('/')}"
+
     async def _host_attachment(
         self,
         interaction: discord.Interaction,
@@ -69,7 +79,6 @@ class FileHostCog(commands.Cog):
         private: bool,
         password: str | None,
         expires_in: int,
-        ephemeral: bool,
     ) -> None:
         lock = self._lock_for(interaction.user.id)
         if lock.locked():
@@ -79,7 +88,8 @@ class FileHostCog(commands.Cog):
             )
             return
 
-        await interaction.response.defer(thinking=True, ephemeral=ephemeral)
+        # A resposta no local onde o comando foi usado é sempre privada (ephemeral).
+        await interaction.response.defer(thinking=True, ephemeral=True)
 
         async with lock:
             temp_path: Path | None = None
@@ -112,6 +122,8 @@ class FileHostCog(commands.Cog):
 
                 if not final_url:
                     raise FileHostError("A API não retornou um link utilizável para este arquivo.")
+
+                preview_url = self._absolute_view_url(upload.view_url)
 
                 embed = discord.Embed(
                     title="✅ Arquivo hospedado",
@@ -158,17 +170,54 @@ class FileHostCog(commands.Cog):
                 embed.add_field(name="ID", value=f"`{upload.id}`", inline=True)
                 embed.set_footer(text="Criado e mantido por Knox Dev")
 
+                # Envia uma cópia por DM. Se o comando já foi usado em DM,
+                # a própria resposta da interação já atende esse destino.
+                dm_sent = interaction.guild is None
+                if interaction.guild is not None:
+                    try:
+                        await interaction.user.send(
+                            embed=embed.copy(),
+                            view=LinkView(final_url, preview_url),
+                        )
+                        dm_sent = True
+                    except (discord.Forbidden, discord.HTTPException) as exc:
+                        logger.info(
+                            "Não foi possível enviar DM | usuário=%s erro=%s",
+                            interaction.user.id,
+                            type(exc).__name__,
+                        )
+
+                local_embed = embed.copy()
+                if dm_sent:
+                    local_embed.add_field(
+                        name="📩 DM",
+                        value="Também enviei uma cópia deste resultado na sua DM.",
+                        inline=False,
+                    )
+                else:
+                    local_embed.add_field(
+                        name="⚠️ DM bloqueada",
+                        value=(
+                            "Não consegui enviar a cópia por DM. Provavelmente suas mensagens diretas "
+                            "estão fechadas para este servidor. O link acima continua funcionando normalmente."
+                        ),
+                        inline=False,
+                    )
+
+                # No canal/servidor, somente quem executou o comando consegue ver esta mensagem.
                 await interaction.followup.send(
-                    embed=embed,
-                    view=LinkView(final_url, upload.view_url),
-                    ephemeral=ephemeral,
+                    embed=local_embed,
+                    view=LinkView(final_url, preview_url),
+                    ephemeral=True,
                 )
+
                 logger.info(
-                    "Upload concluído | usuário=%s arquivo=%s tamanho=%s privado=%s endpoint=%s",
+                    "Upload concluído | usuário=%s arquivo=%s tamanho=%s privado=%s dm=%s endpoint=%s",
                     interaction.user.id,
                     attachment.filename,
                     attachment.size,
                     private,
+                    dm_sent,
                     upload.endpoint,
                 )
             except FileHostError as exc:
@@ -201,13 +250,12 @@ class FileHostCog(commands.Cog):
                     except OSError:
                         logger.warning("Não foi possível remover o temporário %s", temp_path)
 
-    @app_commands.command(name="hospedar", description="Hospeda um arquivo e devolve o link.")
+    @app_commands.command(name="hospedar", description="Hospeda um arquivo e envia o link aqui e na sua DM.")
     @app_commands.describe(
         arquivo="Arquivo que será enviado para a hospedagem.",
         privado="Armazena o arquivo como privado na File Host API.",
         senha="Senha opcional de proteção do arquivo.",
         expira_em="Segundos do link temporário privado: 60 até 2592000.",
-        somente_eu="Se ativado, somente você verá a resposta do bot no Discord.",
     )
     async def hospedar(
         self,
@@ -216,7 +264,6 @@ class FileHostCog(commands.Cog):
         privado: bool = False,
         senha: str | None = None,
         expira_em: app_commands.Range[int, 60, MAX_SIGNED_URL_SECONDS] = 3600,
-        somente_eu: bool = False,
     ) -> None:
         await self._host_attachment(
             interaction,
@@ -224,7 +271,6 @@ class FileHostCog(commands.Cog):
             private=privado,
             password=senha,
             expires_in=int(expira_em),
-            ephemeral=somente_eu,
         )
 
     @app_commands.command(name="sobre", description="Mostra informações sobre o serviço de hospedagem.")
@@ -236,7 +282,8 @@ class FileHostCog(commands.Cog):
                 "• `POST /uploadFile` para upload\n"
                 "• `POST /createSignedUrl` para links temporários privados\n"
                 "• Arquivos públicos recebem link permanente\n"
-                "• Arquivos privados recebem link assinado com expiração\n\n"
+                "• Arquivos privados recebem link assinado com expiração\n"
+                "• O resultado é enviado por DM e também como resposta privada no local do comando\n\n"
                 "Documentação: https://file-host.base44.app/docs"
             ),
             color=discord.Color.blurple(),
