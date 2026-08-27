@@ -112,7 +112,7 @@ class FileHostCog(commands.Cog):
                     details = details[:1700] + "…"
                 await interaction.followup.send(
                     "❌ **Não consegui hospedar o arquivo.**\n"
-                    "A API rejeitou o upload ou a rota configurada não corresponde à documentação.\n\n"
+                    "A API rejeitou o upload ou a rota configurada não corresponde à documentação atual.\n\n"
                     f"```text\n{details}\n```",
                     ephemeral=True,
                 )
@@ -153,7 +153,8 @@ class FileHostCog(commands.Cog):
         embed = discord.Embed(
             title=f"📦 {self.settings.bot_name}",
             description=(
-                "Hospeda anexos enviados pelo Discord usando a API Omni Host/Base44 e devolve um link.\n\n"
+                "Hospeda anexos enviados pelo Discord usando a **File Host API** e devolve um link público.\n\n"
+                "Documentação: https://file-host.base44.app/docs\n\n"
                 "O bot **não define limite próprio de tamanho ou quantidade**. Ainda se aplicam os limites "
                 "de upload do Discord, da hospedagem onde o bot roda e da API utilizada."
             ),
