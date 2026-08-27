@@ -24,14 +24,14 @@ def test_parse_public_upload_response() -> None:
     }
     result = parse_upload_payload(
         payload,
-        endpoint="https://file-host.base44.app/functions/uploadFile",
+        endpoint="https://dev-cloud.base44.app/functions/uploadFile",
         status=200,
-        site_url="https://file-host.base44.app",
+        site_url="https://dev-cloud.base44.app",
     )
     assert result.file_url == "https://cdn.example.com/file.png"
     assert result.file_uri is None
     assert result.is_private is False
-    assert result.view_url == "https://file-host.base44.app/file/abc123"
+    assert result.view_url == "https://dev-cloud.base44.app/file/abc123"
 
 
 def test_parse_private_upload_accepts_file_uri_without_public_url() -> None:
@@ -48,9 +48,9 @@ def test_parse_private_upload_accepts_file_uri_without_public_url() -> None:
     }
     result = parse_upload_payload(
         payload,
-        endpoint="https://file-host.base44.app/functions/uploadFile",
+        endpoint="https://dev-cloud.base44.app/functions/uploadFile",
         status=200,
-        site_url="https://file-host.base44.app",
+        site_url="https://dev-cloud.base44.app",
     )
     assert result.file_url is None
     assert result.file_uri == "private://secret.zip"
@@ -64,7 +64,7 @@ def test_parse_signed_url_response() -> None:
             "expires_in": 3600,
             "expires_at": "2026-08-26T22:33:00Z",
         },
-        endpoint="https://file-host.base44.app/functions/createSignedUrl",
+        endpoint="https://dev-cloud.base44.app/functions/createSignedUrl",
         status=200,
     )
     assert result.signed_url == "https://cdn.example.com/signed"
@@ -74,21 +74,21 @@ def test_parse_signed_url_response() -> None:
 def test_parse_shorten_url_response() -> None:
     result = parse_shorten_payload(
         {
-            "short_url": "https://file-host.base44.app/s/AbC123",
+            "short_url": "https://dev-cloud.base44.app/s/AbC123",
             "code": "AbC123",
             "expires_at": "2026-08-26T22:33:00Z",
         },
-        endpoint="https://file-host.base44.app/functions/shortenUrl",
+        endpoint="https://dev-cloud.base44.app/functions/shortenUrl",
         status=200,
     )
-    assert result.short_url == "https://file-host.base44.app/s/AbC123"
+    assert result.short_url == "https://dev-cloud.base44.app/s/AbC123"
     assert result.code == "AbC123"
 
 
 def test_shorten_parser_accepts_url_alias() -> None:
     result = parse_shorten_payload(
-        {"url": "https://file-host.base44.app/s/test"},
-        endpoint="https://file-host.base44.app/functions/shortenUrl",
+        {"url": "https://dev-cloud.base44.app/s/test"},
+        endpoint="https://dev-cloud.base44.app/functions/shortenUrl",
         status=200,
     )
     assert result.short_url.endswith("/s/test")
@@ -129,6 +129,6 @@ def test_expiry_range() -> None:
 
 def test_absolute_view_url() -> None:
     assert absolute_view_url(
-        "https://file-host.base44.app",
+        "https://dev-cloud.base44.app",
         "/file/abc123",
-    ) == "https://file-host.base44.app/file/abc123"
+    ) == "https://dev-cloud.base44.app/file/abc123"
