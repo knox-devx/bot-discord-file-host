@@ -94,6 +94,25 @@ def make_link_view(file_url: str, view_url: str | None = None) -> LinkView | Non
     return view if view.children else None
 
 
+def delivery_kwargs(file_url: str, view_url: str | None = None) -> dict[str, object]:
+    """Monta apenas os parâmetros opcionais realmente presentes no envio do Discord."""
+    kwargs: dict[str, object] = {}
+
+    content = message_link_content(file_url)
+    if content is not None:
+        kwargs["content"] = content
+
+    view = make_link_view(file_url, view_url)
+    if view is not None:
+        kwargs["view"] = view
+
+    text_file = link_text_file(file_url)
+    if text_file is not None:
+        kwargs["file"] = text_file
+
+    return kwargs
+
+
 class FileHostCog(commands.Cog):
     def __init__(self, bot: commands.Bot, settings: Settings, api: FileHostClient) -> None:
         self.bot = bot
@@ -227,18 +246,14 @@ class FileHostCog(commands.Cog):
                 embed.add_field(name="ID", value=f"`{upload.id}`", inline=True)
                 embed.set_footer(text="Criado e mantido por Knox Dev")
 
-                link_content = message_link_content(final_url)
-
                 # Envia uma cópia por DM. Se o comando já foi usado em DM,
                 # a própria resposta da interação já atende esse destino.
                 dm_sent = interaction.guild is None
                 if interaction.guild is not None:
                     try:
                         await interaction.user.send(
-                            content=link_content,
                             embed=embed.copy(),
-                            view=make_link_view(final_url, preview_url),
-                            file=link_text_file(final_url),
+                            **delivery_kwargs(final_url, preview_url),
                         )
                         dm_sent = True
                     except (discord.Forbidden, discord.HTTPException) as exc:
@@ -267,11 +282,9 @@ class FileHostCog(commands.Cog):
 
                 # No canal/servidor, somente quem executou o comando consegue ver esta mensagem.
                 await interaction.followup.send(
-                    content=link_content,
                     embed=local_embed,
-                    view=make_link_view(final_url, preview_url),
-                    file=link_text_file(final_url),
                     ephemeral=True,
+                    **delivery_kwargs(final_url, preview_url),
                 )
 
                 logger.info(
