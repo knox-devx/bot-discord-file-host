@@ -16,7 +16,6 @@ from bot.config import Settings
 logger = logging.getLogger(__name__)
 
 DISCORD_BUTTON_URL_MAX = 512
-DISCORD_EMBED_FIELD_MAX = 1024
 DISCORD_MESSAGE_CONTENT_MAX = 2000
 
 
@@ -49,68 +48,88 @@ def safe_filename(name: str) -> str:
 
 
 def can_use_button_url(url: str | None) -> bool:
-    """O Discord limita URLs de botões a 512 caracteres."""
     return bool(url) and len(url) <= DISCORD_BUTTON_URL_MAX
 
 
-def embed_link_value(url: str) -> str:
-    """Evita ultrapassar o limite de 1024 caracteres de um campo de embed."""
-    if len(url) <= DISCORD_EMBED_FIELD_MAX:
-        return url
-    return "🔗 O link é muito longo para caber neste campo. Ele foi enviado junto da mensagem."
-
-
-def message_link_content(url: str) -> str | None:
-    """Quando a URL não cabe no embed, tenta entregá-la no conteúdo da mensagem."""
-    if len(url) <= DISCORD_EMBED_FIELD_MAX:
-        return None
-    if len(url) <= DISCORD_MESSAGE_CONTENT_MAX:
-        return url
-    return "🔗 O link completo está no arquivo `link.txt` anexado a esta mensagem."
-
-
-def link_text_file(url: str) -> discord.File | None:
-    """Fallback extremo para URLs maiores que o limite de conteúdo do Discord."""
+def make_link_attachment(url: str) -> discord.File | None:
     if len(url) <= DISCORD_MESSAGE_CONTENT_MAX:
         return None
     return discord.File(io.BytesIO(url.encode("utf-8")), filename="link.txt")
 
 
+def link_message_content(url: str) -> str:
+    if len(url) <= DISCORD_MESSAGE_CONTENT_MAX:
+        return url
+    return "🔗 O link completo está no arquivo `link.txt` anexado a esta mensagem."
+
+
+async def _send_full_link_to_interaction(interaction: discord.Interaction, url: str) -> None:
+    kwargs: dict[str, object] = {
+        "content": link_message_content(url),
+        "ephemeral": interaction.guild is not None,
+    }
+    attachment = make_link_attachment(url)
+    if attachment is not None:
+        kwargs["file"] = attachment
+    await interaction.response.send_message(**kwargs)  # type: ignore[arg-type]
+
+
+async def _send_full_link_dm(user: discord.abc.User, url: str) -> bool:
+    kwargs: dict[str, object] = {"content": link_message_content(url)}
+    attachment = make_link_attachment(url)
+    if attachment is not None:
+        kwargs["file"] = attachment
+    try:
+        await user.send(**kwargs)  # type: ignore[arg-type]
+        return True
+    except (discord.Forbidden, discord.HTTPException):
+        return False
+
+
+class RevealLinkButton(discord.ui.Button):
+    def __init__(self, *, owner_id: int, full_url: str) -> None:
+        super().__init__(
+            label="Receber link",
+            emoji="📩",
+            style=discord.ButtonStyle.primary,
+            custom_id=f"knox-reveal-link:{owner_id}",
+        )
+        self.owner_id = owner_id
+        self.full_url = full_url
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "Este botão pertence à pessoa que fez o upload.",
+                ephemeral=True,
+            )
+            return
+
+        await _send_full_link_to_interaction(interaction, self.full_url)
+
+        # Se o clique ocorreu dentro de um servidor, envia também uma cópia por DM.
+        if interaction.guild is not None:
+            await _send_full_link_dm(interaction.user, self.full_url)
+
+
 class LinkView(discord.ui.View):
-    def __init__(self, file_url: str, view_url: str | None = None) -> None:
-        super().__init__(timeout=None)
+    def __init__(
+        self,
+        *,
+        owner_id: int,
+        full_url: str,
+        button_url: str | None,
+        view_url: str | None = None,
+    ) -> None:
+        super().__init__(timeout=3600)
 
-        # Signed URLs podem ser maiores que 512 caracteres. Nesse caso o link
-        # continua sendo entregue no embed/conteúdo, mas não pode virar botão.
-        if can_use_button_url(file_url):
-            self.add_item(discord.ui.Button(label="Abrir arquivo", url=file_url, emoji="🔗"))
+        if can_use_button_url(button_url):
+            self.add_item(discord.ui.Button(label="Abrir arquivo", url=button_url, emoji="🔗"))
+        else:
+            self.add_item(RevealLinkButton(owner_id=owner_id, full_url=full_url))
 
-        if view_url and view_url != file_url and can_use_button_url(view_url):
+        if view_url and view_url != button_url and can_use_button_url(view_url):
             self.add_item(discord.ui.Button(label="Preview", url=view_url, emoji="👁️"))
-
-
-def make_link_view(file_url: str, view_url: str | None = None) -> LinkView | None:
-    view = LinkView(file_url, view_url)
-    return view if view.children else None
-
-
-def delivery_kwargs(file_url: str, view_url: str | None = None) -> dict[str, object]:
-    """Monta apenas os parâmetros opcionais realmente presentes no envio do Discord."""
-    kwargs: dict[str, object] = {}
-
-    content = message_link_content(file_url)
-    if content is not None:
-        kwargs["content"] = content
-
-    view = make_link_view(file_url, view_url)
-    if view is not None:
-        kwargs["view"] = view
-
-    text_file = link_text_file(file_url)
-    if text_file is not None:
-        kwargs["file"] = text_file
-
-    return kwargs
 
 
 class FileHostCog(commands.Cog):
@@ -124,7 +143,6 @@ class FileHostCog(commands.Cog):
         return self._user_locks.setdefault(user_id, asyncio.Lock())
 
     def _absolute_view_url(self, view_url: str | None) -> str | None:
-        """Converte caminhos como /file/abc123 em URL absoluta para os botões do Discord."""
         if not view_url:
             return None
         if view_url.startswith("https://") or view_url.startswith("http://"):
@@ -132,6 +150,31 @@ class FileHostCog(commands.Cog):
         if view_url.startswith("/"):
             return f"{self.settings.site_url}{view_url}"
         return f"{self.settings.site_url}/{view_url.lstrip('/')}"
+
+    async def _resolve_button_url(
+        self,
+        full_url: str,
+        *,
+        expires_in: int | None,
+    ) -> tuple[str | None, bool]:
+        """Retorna URL segura para botão e se o encurtador foi usado."""
+        if can_use_button_url(full_url):
+            return full_url, False
+
+        try:
+            shortened = await self.api.shorten_url(full_url, expires_in=expires_in)
+            if can_use_button_url(shortened.short_url):
+                return shortened.short_url, True
+            logger.warning(
+                "Encurtador retornou URL acima de 512 caracteres | tamanho=%s",
+                len(shortened.short_url),
+            )
+        except FileHostError as exc:
+            # O encurtador é um aprimoramento. Upload não deve falhar se ele estiver fora do ar
+            # ou ainda não tiver sido publicado no Base44.
+            logger.warning("Não foi possível encurtar o link: %s", exc)
+
+        return None, False
 
     async def _host_attachment(
         self,
@@ -150,7 +193,6 @@ class FileHostCog(commands.Cog):
             )
             return
 
-        # A resposta no local onde o comando foi usado é sempre privada (ephemeral).
         await interaction.response.defer(thinking=True, ephemeral=True)
 
         async with lock:
@@ -190,6 +232,10 @@ class FileHostCog(commands.Cog):
                     raise FileHostError("A API não retornou um link utilizável para este arquivo.")
 
                 preview_url = self._absolute_view_url(upload.view_url)
+                button_url, shortened = await self._resolve_button_url(
+                    final_url,
+                    expires_in=expires_in if signed else None,
+                )
 
                 embed = discord.Embed(
                     title="✅ Arquivo hospedado",
@@ -213,25 +259,32 @@ class FileHostCog(commands.Cog):
                     inline=True,
                 )
 
+                if button_url:
+                    embed.add_field(
+                        name="Link temporário" if signed else "Link permanente",
+                        value=button_url,
+                        inline=False,
+                    )
+                else:
+                    embed.add_field(
+                        name="Link",
+                        value="📩 O link é grande demais para um botão. Use **Receber link** abaixo.",
+                        inline=False,
+                    )
+
+                if shortened:
+                    embed.add_field(
+                        name="🔗 Encurtador",
+                        value="O link original excedia o limite do Discord e foi encurtado pela **Knox Dev Cloud**.",
+                        inline=False,
+                    )
+
                 if signed:
-                    embed.add_field(name="Link temporário", value=embed_link_value(final_url), inline=False)
                     embed.add_field(
                         name="Expiração",
                         value=(
                             f"{format_duration(signed.expires_in or expires_in)}"
                             + (f"\n`{signed.expires_at}`" if signed.expires_at else "")
-                        ),
-                        inline=False,
-                    )
-                else:
-                    embed.add_field(name="Link permanente", value=embed_link_value(final_url), inline=False)
-
-                if len(final_url) > DISCORD_BUTTON_URL_MAX:
-                    embed.add_field(
-                        name="ℹ️ Link longo",
-                        value=(
-                            "O Discord limita URLs de botões a 512 caracteres. Por isso o botão "
-                            "**Abrir arquivo** foi omitido, mas o link continua disponível normalmente."
                         ),
                         inline=False,
                     )
@@ -246,15 +299,18 @@ class FileHostCog(commands.Cog):
                 embed.add_field(name="ID", value=f"`{upload.id}`", inline=True)
                 embed.set_footer(text="Criado e mantido por Knox Dev")
 
-                # Envia uma cópia por DM. Se o comando já foi usado em DM,
-                # a própria resposta da interação já atende esse destino.
+                def make_view() -> LinkView:
+                    return LinkView(
+                        owner_id=interaction.user.id,
+                        full_url=final_url,
+                        button_url=button_url,
+                        view_url=preview_url,
+                    )
+
                 dm_sent = interaction.guild is None
                 if interaction.guild is not None:
                     try:
-                        await interaction.user.send(
-                            embed=embed.copy(),
-                            **delivery_kwargs(final_url, preview_url),
-                        )
+                        await interaction.user.send(embed=embed.copy(), view=make_view())
                         dm_sent = True
                     except (discord.Forbidden, discord.HTTPException) as exc:
                         logger.info(
@@ -274,26 +330,26 @@ class FileHostCog(commands.Cog):
                     local_embed.add_field(
                         name="⚠️ DM bloqueada",
                         value=(
-                            "Não consegui enviar a cópia por DM. Provavelmente suas mensagens diretas "
-                            "estão fechadas para este servidor. O link acima continua funcionando normalmente."
+                            "Não consegui enviar a cópia por DM. A resposta continua disponível aqui "
+                            "somente para você."
                         ),
                         inline=False,
                     )
 
-                # No canal/servidor, somente quem executou o comando consegue ver esta mensagem.
                 await interaction.followup.send(
                     embed=local_embed,
+                    view=make_view(),
                     ephemeral=True,
-                    **delivery_kwargs(final_url, preview_url),
                 )
 
                 logger.info(
-                    "Upload concluído | usuário=%s arquivo=%s tamanho=%s privado=%s dm=%s endpoint=%s",
+                    "Upload concluído | usuário=%s arquivo=%s tamanho=%s privado=%s dm=%s encurtado=%s endpoint=%s",
                     interaction.user.id,
                     attachment.filename,
                     attachment.size,
                     private,
                     dm_sent,
+                    shortened,
                     upload.endpoint,
                 )
             except FileHostError as exc:
@@ -354,21 +410,18 @@ class FileHostCog(commands.Cog):
         embed = discord.Embed(
             title=f"📦 {self.settings.bot_name}",
             description=(
-                "Hospeda arquivos pelo Discord usando a **File Host API v1**.\n\n"
-                "• `POST /uploadFile` para upload\n"
-                "• `POST /createSignedUrl` para links temporários privados\n"
-                "• Arquivos públicos recebem link permanente\n"
-                "• Arquivos privados recebem link assinado com expiração\n"
-                "• O resultado é enviado por DM e também como resposta privada no local do comando\n\n"
+                "Hospeda arquivos pelo Discord usando a **File Host API / Knox Dev Cloud**.\n\n"
+                "• upload público e privado\n"
+                "• links temporários assinados\n"
+                "• senha opcional\n"
+                "• encurtamento automático de links grandes\n"
+                "• resultado por DM + resposta ephemeral\n\n"
                 "Documentação: https://file-host.base44.app/docs"
             ),
             color=discord.Color.blurple(),
         )
         embed.add_field(name="Comando", value="`/hospedar`", inline=True)
         embed.add_field(name="Créditos", value="Knox Dev", inline=True)
-        embed.set_footer(
-            text="A API não impõe limite de tamanho; anexos enviados pelo Discord ainda obedecem aos limites do Discord."
-        )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
