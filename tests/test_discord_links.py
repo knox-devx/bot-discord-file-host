@@ -1,12 +1,11 @@
 from bot.cogs.files import (
     DISCORD_BUTTON_URL_MAX,
-    DISCORD_EMBED_FIELD_MAX,
     DISCORD_MESSAGE_CONTENT_MAX,
     LinkView,
+    RevealLinkButton,
     can_use_button_url,
-    embed_link_value,
-    link_text_file,
-    message_link_content,
+    link_message_content,
+    make_link_attachment,
 )
 
 
@@ -21,34 +20,40 @@ def test_button_accepts_512_and_rejects_513() -> None:
     assert can_use_button_url(make_url(DISCORD_BUTTON_URL_MAX + 1)) is False
 
 
-def test_long_signed_url_is_not_added_as_button() -> None:
+def test_normal_link_uses_url_button() -> None:
+    url = "https://file-host.base44.app/s/abc123"
+    view = LinkView(owner_id=123, full_url=url, button_url=url)
+    assert len(view.children) == 1
+    assert view.children[0].label == "Abrir arquivo"
+
+
+def test_long_link_without_shortener_uses_private_reveal_button() -> None:
     long_url = make_url(DISCORD_BUTTON_URL_MAX + 100)
     preview = "https://file-host.base44.app/file/abc123"
-    view = LinkView(long_url, preview)
+    view = LinkView(
+        owner_id=123,
+        full_url=long_url,
+        button_url=None,
+        view_url=preview,
+    )
 
-    assert len(view.children) == 1
-    assert view.children[0].label == "Preview"
-
-
-def test_embed_field_fallback_after_1024_chars() -> None:
-    normal = make_url(DISCORD_EMBED_FIELD_MAX)
-    long_url = make_url(DISCORD_EMBED_FIELD_MAX + 1)
-
-    assert embed_link_value(normal) == normal
-    assert "muito longo" in embed_link_value(long_url)
-
-
-def test_long_url_moves_to_message_content() -> None:
-    url = make_url(DISCORD_EMBED_FIELD_MAX + 1)
-    assert message_link_content(url) == url
-    assert link_text_file(url) is None
+    assert len(view.children) == 2
+    assert isinstance(view.children[0], RevealLinkButton)
+    assert view.children[0].label == "Receber link"
+    assert view.children[1].label == "Preview"
 
 
-def test_extreme_url_uses_text_attachment() -> None:
+def test_link_fits_normal_message() -> None:
+    url = make_url(DISCORD_MESSAGE_CONTENT_MAX)
+    assert link_message_content(url) == url
+    assert make_link_attachment(url) is None
+
+
+def test_extreme_link_uses_text_attachment() -> None:
     url = make_url(DISCORD_MESSAGE_CONTENT_MAX + 1)
-    assert "link.txt" in (message_link_content(url) or "")
+    assert "link.txt" in link_message_content(url)
 
-    file = link_text_file(url)
+    file = make_link_attachment(url)
     assert file is not None
     assert file.filename == "link.txt"
     file.close()
