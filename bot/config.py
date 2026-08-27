@@ -38,6 +38,7 @@ class Settings:
     api_functions_url: str
     api_upload_url: str
     api_signed_url: str
+    api_shorten_url: str
     connect_timeout: int
     read_timeout: int
     sync_commands: bool
@@ -65,11 +66,14 @@ def load_settings() -> Settings:
 
     upload_url = os.getenv("API_UPLOAD_URL", "").strip() or f"{functions_url}/uploadFile"
     signed_url = os.getenv("API_SIGNED_URL", "").strip() or f"{functions_url}/createSignedUrl"
+    shorten_url = os.getenv("API_SHORTEN_URL", "").strip() or f"{functions_url}/shortenUrl"
 
     if not _valid_http_url(upload_url):
         raise RuntimeError("API_UPLOAD_URL precisa ser uma URL HTTP/HTTPS válida.")
     if not _valid_http_url(signed_url):
         raise RuntimeError("API_SIGNED_URL precisa ser uma URL HTTP/HTTPS válida.")
+    if not _valid_http_url(shorten_url):
+        raise RuntimeError("API_SHORTEN_URL precisa ser uma URL HTTP/HTTPS válida.")
 
     connect_timeout = _env_int("API_CONNECT_TIMEOUT", 30)
     read_timeout = _env_int("API_READ_TIMEOUT", 1800)
@@ -82,6 +86,7 @@ def load_settings() -> Settings:
         api_functions_url=functions_url,
         api_upload_url=upload_url,
         api_signed_url=signed_url,
+        api_shorten_url=shorten_url,
         connect_timeout=connect_timeout,
         read_timeout=read_timeout,
         sync_commands=_env_bool("SYNC_COMMANDS", True),
