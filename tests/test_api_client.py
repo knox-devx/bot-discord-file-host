@@ -1,13 +1,88 @@
-from bot.api_client import extract_url
+from bot.api_client import (
+    MAX_SIGNED_URL_SECONDS,
+    FileHostError,
+    absolute_view_url,
+    parse_signed_payload,
+    parse_upload_payload,
+    validate_expiry,
+)
 
 
-def test_extracts_direct_file_url() -> None:
-    assert extract_url({"file_url": "https://example.com/a.zip"}) == "https://example.com/a.zip"
+def test_parse_public_upload_response() -> None:
+    payload = {
+        "id": "abc123",
+        "name": "file.png",
+        "file_url": "https://cdn.example.com/file.png",
+        "file_uri": "",
+        "is_private": False,
+        "mime_type": "image/png",
+        "size": 102400,
+        "created_date": "2026-08-26T21:33:00Z",
+        "view_url": "/file/abc123",
+    }
+    result = parse_upload_payload(
+        payload,
+        endpoint="https://file-host.base44.app/functions/uploadFile",
+        status=200,
+        site_url="https://file-host.base44.app",
+    )
+    assert result.file_url == "https://cdn.example.com/file.png"
+    assert result.file_uri is None
+    assert result.is_private is False
+    assert result.view_url == "https://file-host.base44.app/file/abc123"
 
 
-def test_extracts_nested_url() -> None:
-    assert extract_url({"data": {"result": {"url": "https://cdn.example.com/file.bin"}}}) == "https://cdn.example.com/file.bin"
+def test_parse_private_upload_accepts_file_uri_without_public_url() -> None:
+    payload = {
+        "id": "private1",
+        "name": "secret.zip",
+        "file_url": "",
+        "file_uri": "private://secret.zip",
+        "is_private": True,
+        "mime_type": "application/zip",
+        "size": 123,
+        "created_date": "2026-08-26T21:33:00Z",
+        "view_url": "/file/private1",
+    }
+    result = parse_upload_payload(
+        payload,
+        endpoint="https://file-host.base44.app/functions/uploadFile",
+        status=200,
+        site_url="https://file-host.base44.app",
+    )
+    assert result.file_url is None
+    assert result.file_uri == "private://secret.zip"
+    assert result.is_private is True
 
 
-def test_rejects_non_url_text() -> None:
-    assert extract_url("upload concluído") is None
+def test_parse_signed_url_response() -> None:
+    result = parse_signed_payload(
+        {
+            "signed_url": "https://cdn.example.com/signed",
+            "expires_in": 3600,
+            "expires_at": "2026-08-26T22:33:00Z",
+        },
+        endpoint="https://file-host.base44.app/functions/createSignedUrl",
+        status=200,
+    )
+    assert result.signed_url == "https://cdn.example.com/signed"
+    assert result.expires_in == 3600
+
+
+def test_expiry_range() -> None:
+    assert validate_expiry(60) == 60
+    assert validate_expiry(MAX_SIGNED_URL_SECONDS) == MAX_SIGNED_URL_SECONDS
+
+    try:
+        validate_expiry(59)
+    except FileHostError:
+        pass
+    else:
+        raise AssertionError("59 segundos deveria ser rejeitado")
+
+
+def test_absolute_view_url() -> None:
+    assert absolute_view_url(
+        "https://file-host.base44.app",
+        "/file/abc123",
+    ) == "https://file-host.base44.app/file/abc123"
