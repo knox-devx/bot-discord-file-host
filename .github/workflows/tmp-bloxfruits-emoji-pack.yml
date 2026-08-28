@@ -18,30 +18,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install --disable-pip-version-check requests beautifulsoup4
-      - name: Inspect missing hotbar item assets
+      - run: python -m pip install --disable-pip-version-check requests
+      - name: Search global Fandom files for missing item icons
         run: |
           python - <<'PY'
-          import requests,re
-          from bs4 import BeautifulSoup
-          from urllib.parse import unquote
-          API='https://blox-fruits.fandom.com/api.php'
-          S=requests.Session();S.headers.update({'User-Agent':'Mozilla/5.0 BloxEmojiPack/4.0'})
-          names=['Torch','Cup','Ancient Relic','Flowers','Core Brain','Hellfire Torch','Library Key','Water Key','Apple','Banana','Pineapple','Hallow Essence','Special Microchip','Fragments Elixir']
-          def api(p):
-              p={'format':'json','formatversion':'2',**p};r=S.get(API,params=p,timeout=20);r.raise_for_status();return r.json()
-          for name in names:
-              print('\n===',name,'===')
-              d=api({'action':'query','prop':'images','titles':name,'imlimit':'max'})
-              pages=d.get('query',{}).get('pages',[])
-              print('QUERY_IMAGES:', [x['title'] for x in (pages[0].get('images',[]) if pages else [])])
-              try:
-                  d=api({'action':'parse','page':name,'prop':'text'})
-                  soup=BeautifulSoup(d.get('parse',{}).get('text',''),'html.parser')
-                  vals=[]
-                  for im in soup.find_all('img'):
-                      v=im.get('data-image-name') or im.get('data-image-key') or im.get('alt')
-                      if v: vals.append(v)
-                  print('PARSE_IMAGES:', list(dict.fromkeys(vals))[:80])
-              except Exception as e: print('PARSE_ERR',repr(e))
+          import requests
+          API='https://blox-fruits.fandom.com/api.php'; S=requests.Session(); S.headers.update({'User-Agent':'Mozilla/5.0 BloxEmojiPack/5.0'})
+          terms=['Torch','Cup','Relic','Flower','Core Brain','Hellfire','Library Key','Water Key','Apple','Banana','Pineapple','Hallow Essence','Microchip','Fragments Elixir']
+          for term in terms:
+            try:
+              r=S.get(API,params={'action':'query','format':'json','formatversion':'2','list':'allimages','aifrom':term,'ailimit':'50'},timeout=20);r.raise_for_status()
+              vals=[x['name'] for x in r.json().get('query',{}).get('allimages',[]) if term.lower().replace(' ','') in x['name'].lower().replace(' ','')]
+              print(term,'=>',vals[:30])
+            except Exception as e: print(term,'ERR',repr(e))
           PY
